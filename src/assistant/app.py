@@ -5,9 +5,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException, Request
 
 from assistant.config import load_config
+from assistant.models import LinkedInDraftRequest
 from assistant.db import init_db
 from assistant.drafts.generator import DraftGenerator
 from assistant.drafts.store import DraftStore
@@ -104,6 +105,7 @@ async def lifespan(app: FastAPI):
     slack_thread = slack_monitor.start_in_thread()
 
     app.state.draft_store = draft_store
+    app.state.draft_generator = draft_generator
     app.state.gmail_client = gmail_client
 
     logger.info("Assistant fully started")
@@ -138,3 +140,15 @@ def health():
         "status": "ok",
         "timestamp": datetime.utcnow().isoformat(),
     }
+
+
+@app.post("/api/linkedin/draft")
+def linkedin_draft(req: Request, body: LinkedInDraftRequest, authorization: str = Header()):
+    """Generate a draft response for a LinkedIn DM. Called by the Chrome extension."""
+    # Auth check
+    expected = f"Bearer {req.app.state.config.api_secret}"
+    if not req.app.state.config.api_secret or authorization != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    generator: DraftGenerator = req.app.state.draft_generator
+    return generator.generate_linkedin_draft(body)

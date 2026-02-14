@@ -129,3 +129,21 @@ class Draft(BaseModel):
     rejected_at: datetime | None = None
     sent_at: datetime | None = None
     edited_text: str | None = None
+
+
+# --- LinkedIn ---
+
+
+class LinkedInDraftRequest(BaseModel):
+    sender_name: str
+    sender_headline: str | None = None
+    message_text: str
+    conversation_context: list[str] = []
+    conversation_id: str
+
+
+class LinkedInDraftResponse(BaseModel):
+    draft_text: str
+    needs_response: bool
+    urgency: str
+    summary: str

@@ -6,7 +6,10 @@ import sqlite3
 import anthropic
 
 from assistant.config import Config
-from assistant.models import EmailClassification, EmailMessage, SlackClassification, SlackMessage
+from assistant.models import (
+    EmailClassification, EmailMessage, LinkedInDraftRequest, LinkedInDraftResponse,
+    SlackClassification, SlackMessage,
+)
 from assistant.voice.feedback import VoiceFeedbackProcessor
 from assistant.voice.profile import VoiceProfileManager
 
@@ -105,6 +108,83 @@ class DraftGenerator:
         if draft.startswith('"') and draft.endswith('"'):
             draft = draft[1:-1]
         return draft
+
+    def generate_linkedin_draft(self, request: LinkedInDraftRequest) -> LinkedInDraftResponse:
+        """Classify a LinkedIn DM and generate a draft response."""
+        # Classify first
+        classify_prompt = (
+            f"Determine if this LinkedIn message needs a response from Sarah.\n\n"
+            f"From: {request.sender_name}"
+        )
+        if request.sender_headline:
+            classify_prompt += f" ({request.sender_headline})"
+        classify_prompt += f"\nMessage: {request.message_text}\n"
+        if request.conversation_context:
+            classify_prompt += f"\nConversation history:\n" + "\n".join(request.conversation_context)
+        classify_prompt += (
+            "\n\nRespond with JSON only: "
+            '{"needs_response": true/false, "urgency": "high/medium/low", "summary": "1 sentence"}'
+        )
+
+        classify_response = self.client.messages.create(
+            model=self.model,
+            max_tokens=200,
+            system="You classify LinkedIn DMs for Sarah Madden, Head of Investor Partnerships. "
+                   "Messages from investors, partners, or professional contacts usually need responses. "
+                   "Spam, sales pitches, and generic connection requests usually don't. Return JSON only.",
+            messages=[{"role": "user", "content": classify_prompt}],
+        )
+
+        import json
+        try:
+            classification = json.loads(classify_response.content[0].text.strip())
+        except json.JSONDecodeError:
+            classification = {"needs_response": True, "urgency": "medium", "summary": "Could not classify"}
+
+        if not classification.get("needs_response", True):
+            return LinkedInDraftResponse(
+                draft_text="",
+                needs_response=False,
+                urgency=classification.get("urgency", "low"),
+                summary=classification.get("summary", "No response needed"),
+            )
+
+        # Generate draft — LinkedIn tone is more casual than email, no sign-off
+        system = self._build_system_prompt(recipient_type="investor")
+        user_content = (
+            f"Draft a LinkedIn DM reply to this message.\n\n"
+            f"From: {request.sender_name}"
+        )
+        if request.sender_headline:
+            user_content += f" ({request.sender_headline})"
+        user_content += f"\nMessage: {request.message_text}\n"
+        if request.conversation_context:
+            user_content += f"\nConversation history:\n" + "\n".join(request.conversation_context[-5:])
+        user_content += (
+            "\n\nLinkedIn DM style rules:"
+            "\n- Shorter than email. 1-3 sentences max."
+            "\n- No sign-off (no 'Best,' or 'Thanks,'). Just end naturally."
+            "\n- Casual but professional. Like texting a colleague."
+            "\n- Do NOT wrap in quotes."
+        )
+
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=300,
+            system=system,
+            messages=[{"role": "user", "content": user_content}],
+        )
+
+        draft = response.content[0].text.strip()
+        if draft.startswith('"') and draft.endswith('"'):
+            draft = draft[1:-1]
+
+        return LinkedInDraftResponse(
+            draft_text=draft,
+            needs_response=True,
+            urgency=classification.get("urgency", "medium"),
+            summary=classification.get("summary", ""),
+        )
 
     def _build_system_prompt(self, recipient_type: str | None = None) -> str:
         """Build the system prompt with voice profile and feedback."""

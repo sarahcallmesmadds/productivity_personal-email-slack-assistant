@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>LinkedIn DM Assistant</h1>
+
+    <div id="status-bar" class="status disconnected">
+      <span id="status-dot" class="dot"></span>
+      <span id="status-text">Checking...</span>
+    </div>
+
+    <div class="field">
+      <label for="apiUrl">API URL</label>
+      <input type="text" id="apiUrl" placeholder="https://your-app.railway.app">
+    </div>
+
+    <div class="field">
+      <label for="apiSecret">API Secret</label>
+      <input type="password" id="apiSecret" placeholder="your-api-secret">
+    </div>
+
+    <div class="field toggle-field">
+      <label for="enabled">Enabled</label>
+      <label class="toggle">
+        <input type="checkbox" id="enabled" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <button id="saveBtn">Save Settings</button>
+
+    <div id="lastDraft" class="last-draft" style="display: none;">
+      <span class="label">Last draft:</span>
+      <span id="lastDraftInfo"></span>
+    </div>
+
+    <div id="errorMsg" class="error" style="display: none;"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
